@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --font-sans: 'Inter', system-ui, sans-serif;
+  }
+  body {
+    @apply bg-gradient-to-br from-slate-950 via-purple-950/30 to-slate-950 text-white;
+    min-height: 100vh;
+  }
+  * { @apply border-gray-800; }
+}
+
+@layer utilities {
+  .glow { text-shadow: 0 0 8px theme('colors.neon.cyan'), 0 0 20px theme('colors.neon.cyan'); }
+  .glow-purple { text-shadow: 0 0 8px theme('colors.neon.purple'), 0 0 20px theme('colors.neon.purple'); }
+  .neon-border { box-shadow: 0 0 0 1px theme('colors.neon.cyan'), 0 0 15px theme('colors.neon.cyan') / 20%; }
+  .card-glass {
+    @apply bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl;
+  }
+}
