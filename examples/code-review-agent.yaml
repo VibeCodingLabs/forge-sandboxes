@@ -1,0 +1,14 @@
+# forge-sandboxes example: code review agent in isolated VM
+name: code-review-agent
+vm: vm2
+model: auto  # Portkey routes to cheapest sufficient model
+
+steps:
+  - /sandbox forge init code-reviewer
+  - /sandbox forge evaluate-idea "code review agent with 3 tools: lint, test, security-scan"
+  - /sandbox forge execute
+  - /sandbox forge verify
+
+security:
+  network: isolated   # No egress during agent execution
+  cleanup: true       # VM destroyed after task

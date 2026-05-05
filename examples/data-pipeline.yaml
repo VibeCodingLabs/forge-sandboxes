@@ -1,0 +1,11 @@
+# forge-sandboxes example: data pipeline scaffolded by agent in VM3
+name: data-pipeline
+vm: vm3
+model: groq-llama-3.3-70b  # Fast + cheap for scaffold tasks
+
+steps:
+  - /sandbox forge init etl-pipeline
+  - /sandbox forge evaluate-idea "async Python ETL: CSV in, Postgres out"
+  - /sandbox forge plan-milestone "Phase 1: ingest + transform"
+  - /sandbox forge execute
+  - /sandbox forge verify --level L5

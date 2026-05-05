@@ -1,0 +1,16 @@
+# forge-sandboxes example: build a hello API in a microVM
+name: hello-api
+vm: vm1
+model: claude-3.5-sonnet  # or gpt-4o, gemini-2.0-flash, groq-llama3
+
+steps:
+  - /sandbox forge init hello-api
+  - /sandbox forge evaluate-idea "minimal FastAPI hello world"
+  - /sandbox forge plan-milestone "MVP REST API"
+  - /sandbox forge execute
+  - /sandbox forge verify --phase VERIFY
+
+expected_output:
+  - status: success
+  - forge_phase: SHIP
+  - health_endpoint: /health
