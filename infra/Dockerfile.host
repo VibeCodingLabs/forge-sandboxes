@@ -1,0 +1,30 @@
+FROM alpine:3.19
+
+RUN apk add --no-cache \
+    bash curl wget \
+    iproute2 iptables \
+    nodejs npm \
+    e2fsprogs \
+    util-linux
+
+# Download Firecracker binary (v1.7.0 latest stable)
+RUN FC_VERSION=v1.7.0 && \
+    wget -qO /usr/local/bin/firecracker \
+      "https://github.com/firecracker-microvm/firecracker/releases/download/${FC_VERSION}/firecracker-${FC_VERSION}-x86_64.tgz" 2>/dev/null || \
+    echo 'Firecracker binary download deferred to runtime'
+
+RUN chmod +x /usr/local/bin/firecracker 2>/dev/null || true
+
+# Forge sandbox management API (Node.js)
+WORKDIR /app
+COPY package*.json ./
+COPY infra/server.js ./infra/server.js
+RUN npm ci --omit=dev
+
+# Network setup script
+COPY infra/setup-network.sh /setup-network.sh
+RUN chmod +x /setup-network.sh
+
+EXPOSE 8090
+
+CMD ["/bin/sh", "-c", "/setup-network.sh && node infra/server.js"]

@@ -1,30 +1,142 @@
 version: '3.8'
 
+networks:
+  fc-bridge:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.16.0.0/24
+
+volumes:
+  vm-images:
+  sandboxes:
+
 services:
-  gui:
+  # ── Firecracker host (unprivileged, KVM device passthrough) ──────────────
+  firecracker-host:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.host
+    container_name: forge-fc-host
+    restart: unless-stopped
+    privileged: false
+    cap_add:
+      - NET_ADMIN
+      - SYS_PTRACE
+    devices:
+      - /dev/kvm:/dev/kvm    # optional HW acceleration
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      - '2375:2375'   # Firecracker management API
+      - '8090:8090'   # Forge-sandbox REST API
+    volumes:
+      - vm-images:/vm-images
+      - sandboxes:/sandboxes
+      - ./infra/cloud-init:/cloud-init:ro
+    networks:
+      fc-bridge:
+        ipv4_address: 172.16.0.2
+    environment:
+      FC_KERNEL_PATH: /vm-images/vmlinux.bin
+      FC_ROOTFS_PATH: /vm-images/rootfs.ext4
+      FC_LOG_LEVEL: Info
+      FORGE_SOCKET: /tmp/forge.sock
+      NODE_ENV: production
+    healthcheck:
+      test: ['CMD', 'curl', '-sf', 'http://localhost:8090/health']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ── VM1 — forge agent execution sandbox ─────────────────────────────────
+  vm1:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.vm-builder
+    container_name: forge-vm1
+    privileged: false
+    cap_add: [NET_ADMIN]
+    devices: [/dev/kvm:/dev/kvm]
+    networks:
+      fc-bridge:
+        ipv4_address: 172.16.0.10
+    volumes:
+      - vm-images:/vm-images
+      - ./infra/cloud-init/vm1.yaml:/cloud-init.yaml:ro
+    environment:
+      VM_ID: vm1
+      VM_CPU: 1
+      VM_MEM: 512
+      VM_PORT: 8001
+    depends_on:
+      firecracker-host:
+        condition: service_healthy
+
+  # ── VM2 ──────────────────────────────────────────────────────────────────
+  vm2:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.vm-builder
+    container_name: forge-vm2
+    privileged: false
+    cap_add: [NET_ADMIN]
+    devices: [/dev/kvm:/dev/kvm]
+    networks:
+      fc-bridge:
+        ipv4_address: 172.16.0.11
+    volumes:
+      - vm-images:/vm-images
+      - ./infra/cloud-init/vm2.yaml:/cloud-init.yaml:ro
+    environment:
+      VM_ID: vm2
+      VM_CPU: 1
+      VM_MEM: 512
+      VM_PORT: 8002
+    depends_on:
+      firecracker-host:
+        condition: service_healthy
+
+  # ── VM3 ──────────────────────────────────────────────────────────────────
+  vm3:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.vm-builder
+    container_name: forge-vm3
+    privileged: false
+    cap_add: [NET_ADMIN]
+    devices: [/dev/kvm:/dev/kvm]
+    networks:
+      fc-bridge:
+        ipv4_address: 172.16.0.12
+    volumes:
+      - vm-images:/vm-images
+      - ./infra/cloud-init/vm3.yaml:/cloud-init.yaml:ro
+    environment:
+      VM_ID: vm3
+      VM_CPU: 1
+      VM_MEM: 512
+      VM_PORT: 8003
+    depends_on:
+      firecracker-host:
+        condition: service_healthy
+
+  # ── Next.js app (Vercel-compatible, Supabase auth) ───────────────────────
+  web:
     build:
       context: .
       dockerfile: Dockerfile
+    container_name: forge-web
+    restart: unless-stopped
     ports:
       - '3000:3000'
+    networks: [fc-bridge]
     environment:
-      - NODE_ENV=production
-      - FIRECRACKER_HOST=http://proxy:8080
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      FIRECRACKER_HOST: http://172.16.0.2:8090
+      PORTKEY_API_KEY: ${PORTKEY_API_KEY}
+      NODE_ENV: production
     depends_on:
-      - proxy
-    restart: unless-stopped
-
-  proxy:
-    image: node:20-alpine
-    working_dir: /app
-    volumes:
-      - ./proxy:/app
-    ports:
-      - '8080:8080'
-    command: sh -c "npm i express && node server.js"
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      firecracker-host:
+        condition: service_healthy

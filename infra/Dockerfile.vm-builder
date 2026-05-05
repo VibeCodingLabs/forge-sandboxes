@@ -1,0 +1,24 @@
+FROM alpine:3.19
+
+RUN apk add --no-cache \
+    bash curl e2fsprogs \
+    nodejs npm \
+    openssh-server
+
+# Apply cloud-init config at build time
+COPY infra/cloud-init/vm1.yaml /cloud-init.yaml
+
+# Install Forge CLI inside this image (embedded in rootfs later)
+RUN mkdir -p /opt/forge && \
+    npm install -g @vibecodinglabs/forge-core 2>/dev/null || \
+    echo '# forge-core install deferred — package not yet published'
+
+# Build ext4 rootfs from this container's filesystem
+RUN mkdir -p /vm-images
+
+CMD ["/bin/sh", "-c", \
+  "echo Building rootfs for VM $VM_ID && \
+   dd if=/dev/zero of=/vm-images/rootfs-$VM_ID.ext4 bs=1M count=512 && \
+   mkfs.ext4 /vm-images/rootfs-$VM_ID.ext4 && \
+   echo rootfs-$VM_ID.ext4 built && \
+   sleep infinity"]

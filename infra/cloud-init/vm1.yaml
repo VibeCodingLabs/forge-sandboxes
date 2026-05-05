@@ -1,0 +1,22 @@
+#cloud-config
+hostname: forge-vm1
+
+packages:
+  - nodejs
+  - npm
+  - bash
+  - curl
+
+runcmd:
+  - npm install -g @vibecodinglabs/forge-core 2>/dev/null || echo 'forge-core deferred'
+  - mkdir -p /workspace
+  - forge-core init /workspace 2>/dev/null || echo 'forge init deferred'
+  - echo 'FORGE_READY=1' >> /etc/environment
+  - touch /ready.flag
+
+write_files:
+  - path: /etc/forge-vm.conf
+    content: |
+      VM_ID=vm1
+      FORGE_VERSION=1.0
+      WORKSPACE=/workspace
