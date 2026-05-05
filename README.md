@@ -1,188 +1,123 @@
-# 🔥 Forge Sandboxes
+# forge-sandboxes
 
-> Visual GUI for configuring and deploying [Firecracker microVMs](https://firecracker-microvm.github.io/) as agent sandboxes — no JSON wrangling required.
+> Provider-agnostic Forge Framework AI agents running inside Firecracker microVMs — isolated, fast, production-secure.
 
-[![Next.js](https://img.shields.io/badge/next.js-16-black?logo=next.js&logoColor=white)](https://nextjs.org)
-[![Tailwind CSS](https://img.shields.io/badge/tailwindcss-3.4-38bdf8?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
-[![Framer Motion](https://img.shields.io/badge/framer--motion-11-ff0055?logo=framer&logoColor=white)](https://www.framer.com/motion)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FVibeCodingLabs%2Fforge-sandboxes)
 
----
+## What This Is
 
-## What Is This?
+Forge Sandboxes combines three layers:
 
-Firecracker microVMs provide hardware-level isolation for AI agent sandboxes — but configuring them requires raw JSON API calls, bitmap masking, and kernel path management. **Forge Sandboxes** is a visual GUI that generates all that config for you.
+| Layer | Technology | Purpose |
+|-------|------------|--------|
+| **Isolation** | Firecracker microVMs | Fresh kernel per agent run, ~130ms boot |
+| **Orchestration** | Forge Framework (your `forge-core`) | Phase gates, L1-L7 verification |
+| **Auth + DB** | Supabase | JWT auth, RLS-protected session logs |
+| **Deployment** | Vercel (Next.js App Router) | Edge-compatible, zero-config deploy |
+| **LLM Routing** | Portkey | Provider-agnostic: Claude, GPT-4o, Gemini, Groq, etc. |
 
-### The Problem
+## Quick Start
 
 ```bash
-# Without Forge Sandboxes — raw curl nightmare
-curl --unix-socket /tmp/firecracker.socket \
-  -X PUT http://localhost/machine-config \
-  -d '{"vcpu_count":4,"mem_size_mib":1024,"cpu_template":"T2CL"}'
+git clone https://github.com/VibeCodingLabs/forge-sandboxes
+cd forge-sandboxes
+cp .env.example .env.local  # fill in Supabase + Portkey keys
+npm install
+npm run dev
 ```
 
-### The Solution
+## Docker Compose (Firecracker stack)
 
-Drag sliders. Pick a preset. Click **Deploy**. ✅
+```bash
+# Build VM images (Alpine rootfs + Forge CLI pre-installed)
+make build
 
----
+# Spin up 3 Firecracker VMs + web app
+docker compose up -d
 
-## Features
+# Run tests
+make test
+```
 
-- 🎚️ **Visual sliders** for vCPU count (1–64) and memory (128 MiB–64 GiB)
-- 📦 **CPU template picker** — T2CL, T2A, C3, or custom CPUID bitmaps
-- 🗂️ **Drag-drop** kernel (`.elf`) and rootfs (`.squashfs`) upload
-- 🤖 **Agent presets** — Python 3.12, Node 20, Secure (hardened)
-- 👁️ **Live JSON preview** with copy/export
-- 🚀 **One-click deploy** via OpenAPI proxy to your Firecracker orchestrator
-- 🌑 **Cyberpunk neon UI** with Framer Motion animations
+## /sandbox Slash Command
 
----
+```bash
+# POST /api/sandbox (requires Supabase JWT)
+curl -X POST https://your-app.vercel.app/api/sandbox \\
+  -H "Authorization: Bearer <supabase-jwt>" \\
+  -H "Content-Type: application/json" \\
+  -d '{ "task": "forge init hello-api", "vmId": "vm1", "model": "auto" }'
+
+# Response
+# { "sessionId": "uuid", "ok": true, "duration": 1420, "output": "..." }
+```
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│              Next.js 16 App Router               │
-│  ┌──────────────┐  ┌────────────────────────┐   │
-│  │  ConfigForm  │  │  DragDropKernel/Rootfs  │   │
-│  │  (Sliders)   │  │  (react-dropzone)       │   │
-│  └──────┬───────┘  └──────────┬─────────────┘   │
-│         │   Zod Validation    │                  │
-│         └─────────┬───────────┘                  │
-│               JsonPreview                        │
-│                   │                              │
-│          /api/deploy (Next.js Route)             │
-└─────────────────────────┬───────────────────────┘
-                          │ HTTP
-              ┌───────────▼───────────┐
-              │  Firecracker Proxy    │
-              │  (Node/Python)        │
-              └───────────┬───────────┘
-                          │ Unix Socket
-              ┌───────────▼───────────┐
-              │  Firecracker VMM      │
-              │  (KVM microVMs)       │
-              └───────────────────────┘
+Client
+  │
+  └── POST /api/sandbox (Next.js, Vercel)
+        │ Supabase JWT auth check
+        │ Zod input validation (LLM01 mitigation)
+        │ Create sandbox_session record (RLS)
+        │
+        └── forge-host:8090/sandbox
+              │ Forge phase gate check
+              │ Spawn Firecracker microVM
+              │   └─ Alpine rootfs + Node.js + Forge CLI
+              │   └─ cloud-init auto-installs dependencies
+              │   └─ fc-bridge network (HTTP only egress)
+              │ Agent task → /sandbox command
+              │ forge-core verify --phase VERIFY
+              └── VM shutdown + audit log
 ```
 
----
+## VM Pool
 
-## Quick Start
+| VM | IP | CPU | RAM | Port |
+|----|----|-----|-----|------|
+| vm1 | 172.16.0.10 | 1 vCPU | 512 MB | 8001 |
+| vm2 | 172.16.0.11 | 1 vCPU | 512 MB | 8002 |
+| vm3 | 172.16.0.12 | 1 vCPU | 512 MB | 8003 |
 
-### Prerequisites
-
-- Node.js 20+
-- npm 10+
-- Docker (optional, for full stack)
-
-### Development
+## Example Tasks
 
 ```bash
-# Clone
-git clone https://github.com/VibeCodingLabs/forge-sandboxes.git
-cd forge-sandboxes
+# hello API
+forge-sandbox run examples/hello-api.yaml
 
-# Install
-npm install
+# Code review agent
+forge-sandbox run examples/code-review-agent.yaml
 
-# Configure
-cp .env.example .env.local
-
-# Run
-npm run dev
-# Open http://localhost:3000
+# Data pipeline
+forge-sandbox run examples/data-pipeline.yaml
 ```
 
-### Docker (Full Stack)
+## Deploy to Vercel
 
 ```bash
-docker-compose up -d
-# GUI: http://localhost:3000
-# Proxy: http://localhost:8080
+npm i -g vercel
+vercel env add NEXT_PUBLIC_SUPABASE_URL
+vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY
+vercel env add SUPABASE_SERVICE_ROLE_KEY
+vercel env add PORTKEY_API_KEY
+vercel env add FIRECRACKER_HOST   # your Firecracker host public URL
+vercel --prod
 ```
 
----
+## Supabase Setup
 
-## Project Structure
-
-```
-forge-sandboxes/
-├── app/                         # Next.js 16 App Router
-│   ├── api/
-│   │   ├── deploy/route.ts      # Firecracker proxy endpoint
-│   │   └── openapi/route.ts     # OpenAPI spec loader
-│   ├── layout.tsx               # Root layout + providers
-│   └── page.tsx                 # Dashboard
-├── components/
-│   ├── ui/                      # shadcn/ui primitives
-│   ├── ConfigForm.tsx           # Main config sliders/dropdowns
-│   ├── DragDropKernel.tsx       # Kernel/rootfs upload
-│   ├── JsonPreview.tsx          # Live JSON view + export
-│   └── Presets.tsx              # Agent preset selector
-├── hooks/
-│   └── use-firecracker.ts       # React Query deploy hook
-├── lib/
-│   ├── firecracker-schema.ts    # Zod schemas (mirrors FC API)
-│   ├── presets.ts               # Preset definitions
-│   └── utils.ts                 # cn() + helpers
-├── proxy/
-│   └── server.js                # Node proxy to Firecracker
-├── .github/workflows/
-│   └── ci.yml                   # CI/CD pipeline
-├── docker-compose.yml
-├── Dockerfile
-└── tailwind.config.ts
+```bash
+npx supabase db push
+# Applies supabase/migrations/0001_forge_sandboxes.sql
+# Creates: sandbox_sessions, audit_log + RLS policies
 ```
 
----
+## Security
 
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `FIRECRACKER_HOST` | `http://localhost:8080` | Firecracker proxy URL |
-| `NEXT_PUBLIC_FIRECRACKER_HOST` | `http://localhost:8080` | Client-side proxy URL |
-| `OPENAPI_SPEC_URL` | `/api/openapi` | OpenAPI spec endpoint |
-
----
-
-## Agent Presets
-
-| Preset | vCPUs | Memory | Template | Use Case |
-|--------|-------|--------|----------|----------|
-| `python-agent` | 2 | 512 MiB | T2CL | Python 3.12 AI agents |
-| `node-runtime` | 4 | 1024 MiB | T2CL | Node.js 20 code exec |
-| `secure-agent` | 1 | 256 MiB | Custom | Hardened, minimal attack surface |
-
----
-
-## CPU Templates
-
-| Template | CPU Target | Notes |
-|----------|-----------|-------|
-| `T2CL` | Intel Cascade Lake | Recommended for x86_64 |
-| `T2A` | AMD Milan | Recommended for AMD |
-| `C3` | Intel Skylake | Legacy |
-| `custom` | Any | Full CPUID bitmap control |
-
----
-
-## Contributing
-
-1. Fork → `git checkout -b feat/my-feature`
-2. Commit → `git commit -m 'feat: ...'`
-3. Push → `git push origin feat/my-feature`
-4. Open Pull Request
-
----
+See [SECURITY.md](./SECURITY.md) for the full audit checklist (OWASP Top 10, LLM Top 10, NIST CSF 2.0, SOC 2 prep).
 
 ## License
 
-MIT — see [LICENSE](./LICENSE)
-
----
-
-> Built by [VibeCodingLabs](https://github.com/VibeCodingLabs) · Phantom Digital LLC
+MIT — VibeCodingLabs
